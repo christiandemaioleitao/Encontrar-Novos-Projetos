@@ -2,25 +2,39 @@ name: Scanner de Alvarás — Goiânia
 
 on:
   schedule:
-    # Executa todo dia às 12:00 UTC (= 09:00 Brasília)
+    # Executa todo dia às 09:00 Brasília = 12:00 UTC
     - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
-      start_id:
-        description: "ID inicial para testar (sobrescreve o estado salvo)"
+      TELEGRAM_BOT_TOKEN:
+        description: "Token do Bot Telegram"
+        required: true
+        type: string
+      TELEGRAM_CHAT_ID:
+        description: "Chat ID do Telegram"
+        required: true
+        type: string
+      TELEGRAM_THREAD_ID:
+        description: "Thread ID (opicional)"
         required: false
+        type: string
+      START_ID:
+        description: "ID inicial (opicional)"
+        required: false
+        type: string
         default: ""
 
 jobs:
   scan:
     name: 🔍 Varredura de Alvarás
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Configurar Python 3.11
         uses: actions/setup-python@v5
@@ -33,38 +47,37 @@ jobs:
       - name: Restaurar estado anterior
         run: |
           if [ -f scripts/last_valid_id.json ]; then
-            echo "Estado anterior encontrado"
-            cat scripts/last_valid_id.json
+            echo "✅ Estado encontrado: $(cat scripts/last_valid_id.json)"
           else
             echo '{ "last_valid_id": 49125, "consecutive_empty": 0 }' > scripts/last_valid_id.json
           fi
 
-      - name: Sobrescrever start_id se fornecido manualmente
-        if: github.event.inputs.start_id != ''
+      - name: Sobrescrever start_id se fornecido
+        if: inputs.START_ID != ''
         run: |
-          START_ID="${{ github.event.inputs.start_id }}"
-          python -c "
+          python3 -c "
           import json
           with open('scripts/last_valid_id.json') as f:
-              state = json.load(f)
-          state['last_valid_id'] = int('${{ github.event.inputs.start_id }}')
-          state['consecutive_empty'] = 0
+              s = json.load(f)
+          s['last_valid_id'] = int('${{ inputs.START_ID }}')
+          s['consecutive_empty'] = 0
           with open('scripts/last_valid_id.json', 'w') as f:
-              json.dump(state, f, indent=2)
-          print(f'Start ID forçado para: {state[\"last_valid_id\"]}')
+              json.dump(s, f)
+          print('Start ID forçado: ' + str(s['last_valid_id']))
           "
 
       - name: Executar scanner
         run: python scripts/alvara_scanner.py
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_THREAD_ID: ${{ secrets.TELEGRAM_THREAD_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ inputs.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ inputs.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_ID: ${{ inputs.TELEGRAM_THREAD_ID }}
+          START_ID: ${{ inputs.START_ID }}
 
       - name: Commitar estado atualizado
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add scripts/last_valid_id.json scripts/scan_log.json 2>/dev/null || true
-          git commit -m "[auto] atualiza scanner $(date +'%Y-%m-%d')" 2>/dev/null || echo "Nada para commitar"
-          git push origin main 2>/dev/null || echo "Push não realizado"
+          git commit -m "[auto] atualiza scanner $(date +'%Y-%m-%d %H:%M')" || echo "Nada a commitar"
+          git push origin main || echo "Push não realizado (verifique permissões)"
