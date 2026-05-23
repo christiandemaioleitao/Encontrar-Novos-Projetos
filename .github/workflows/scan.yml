@@ -18,11 +18,6 @@ on:
         description: "Thread ID (opicional)"
         required: false
         type: string
-      START_ID:
-        description: "ID inicial (opicional)"
-        required: false
-        type: string
-        default: ""
 
 jobs:
   scan:
@@ -31,53 +26,41 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout do repositório
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Configurar Python 3.11
+      - name: Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Instalar dependências
-        run: pip3 install --quiet requests
+      - name: Instalar requests
+        run: python3 -m pip install --quiet requests
 
-      - name: Restaurar estado anterior
+      - name: Restaurar estado
         run: |
           if [ -f scripts/last_valid_id.json ]; then
-            echo "✅ Estado encontrado: $(cat scripts/last_valid_id.json)"
+            echo "✅ Estado: $(cat scripts/last_valid_id.json)"
           else
             echo '{ "last_valid_id": 49125, "consecutive_empty": 0 }' > scripts/last_valid_id.json
+            echo "📄 Estado inicial criado"
           fi
-
-      - name: Sobrescrever start_id se fornecido
-        if: inputs.START_ID != ''
-        run: |
-          python3 -c "
-          import json
-          with open('scripts/last_valid_id.json') as f:
-              s = json.load(f)
-          s['last_valid_id'] = int('${{ inputs.START_ID }}')
-          s['consecutive_empty'] = 0
-          with open('scripts/last_valid_id.json', 'w') as f:
-              json.dump(s, f)
-          print('Start ID forçado: ' + str(s['last_valid_id']))
-          "
 
       - name: Executar scanner
         run: python3 scripts/alvara_scanner.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ inputs.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ inputs.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID:   ${{ inputs.TELEGRAM_CHAT_ID }}
           TELEGRAM_THREAD_ID: ${{ inputs.TELEGRAM_THREAD_ID }}
-          START_ID: ${{ inputs.START_ID }}
 
-      - name: Commitar estado atualizado
+      - name: Salvar estado no repo
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add scripts/last_valid_id.json scripts/scan_log.json 2>/dev/null || true
-          git commit -m "[auto] atualiza scanner $(date +'%Y-%m-%d %H:%M')" || echo "Nada a commitar"
-          git push origin main || echo "Push não realizado (verifique permissões)"
+          git diff --cached --quiet && echo "Sem mudanças" || {
+            git commit -m "[auto] scanner $(date +'%Y-%m-%d %H:%M')" || true
+            git push origin main || echo "Push não realizado"
+          }
