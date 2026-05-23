@@ -91,26 +91,33 @@ def fetch_project(project_id):
     if "não encontrado" in html or ("Tipo Alvar" not in html):
         return None
 
-    def extract(label):
+    def extract_all(label):
         pattern = rf"{re.escape(label)}.*?<td[^>]*>(.*?)</td>"
         m = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
         if m:
             return re.sub(r"<[^>]+>", "", m.group(1)).strip()
         return ""
 
-    # Extrai todos os campos disponíveis
-    situacao      = extract("Situação")      or "—"
-    taxa          = extract("Data Pagamento Taxa Inicial") or "—"
-    licenca_previa = extract("Licença Prévia") or "—"
-    autor         = extract("Autor")          or "—"
+    situacao       = extract_all("Situação")                            or "—"
+    taxa           = extract_all("Data Pagamento Taxa Inicial")          or "—"
+    licenca_previa = extract_all("Licença Prévia")                       or "—"
+    tipo           = extract_all("Tipo")                                 or "—"
+    proprietario   = extract_all("Proprietário")                         or "—"
+    endereco       = extract_all("Endereço")                             or "—"
+    pavimentos     = extract_all("Descrição de Pavimentos")            or "—"
+    num_pav        = extract_all("Número de Pavimentos")                or "—"
 
     return {
-        "id":           project_id,
-        "url":          url,
-        "situacao":     situacao,
-        "taxa_data":    taxa,
+        "id":            project_id,
+        "url":           url,
+        "situacao":      situacao,
+        "taxa_data":     taxa,
         "licenca_previa": licenca_previa,
-        "autor":        autor,
+        "tipo":          tipo,
+        "proprietario":  proprietario,
+        "endereco":      endereco,
+        "pavimentos":    pavimentos,
+        "num_pav":       num_pav,
     }
 
 def build_message(projects, run_id=None):
@@ -128,12 +135,22 @@ def build_message(projects, run_id=None):
             f"🔗 <a href=\"{p['url']}\">Acompanhar Projeto</a>",
             f"📌 Status: {p['situacao']}",
         ]
-        if p.get("taxa_data") and p["taxa_data"] != "—":
+        if p.get("taxa_data") and p["taxa_data"] not in ("—",""):
             lines.append(f"💳 Taxa Inicial: {p['taxa_data']}")
-        if p.get("licenca_previa") and p["licenca_previa"] not in ("—", ""):
+        if p.get("tipo") and p["tipo"] not in ("—",""):
+            lines.append(f"🏗️ Tipo: {p['tipo']}")
+        if p.get("endereco") and p["endereco"] not in ("—",""):
+            lines.append(f"📍 Endereço: {p['endereco']}")
+        if p.get("proprietario") and p["proprietario"] not in ("—",""):
+            lines.append(f"👤 Proprietário: {p['proprietario']}")
+        if p.get("num_pav") and p["num_pav"] not in ("—",""):
+            lines.append(f"🏢 Pavimentos: {p['num_pav']}")
+        if p.get("pavimentos") and p["pavimentos"] not in ("—",""):
+            lines.append(f"📐 {p['pavimentos']}")
+        if p.get("licenca_previa") and p["licenca_previa"] not in ("—",""):
             lines.append(f"📄 Licença Prévia: {p['licenca_previa']}")
-        if p.get("autor") and p["autor"] not in ("—", ""):
-            lines.append(f"🏢 {p['autor']}")
+        if p.get("autor") and p["autor"] not in ("—",""):
+            lines.append(f"🏢 Autor: {p['autor']}")
         lines.append("")
     return "\n".join(lines)
 
