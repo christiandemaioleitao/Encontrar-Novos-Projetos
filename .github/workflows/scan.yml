@@ -42,7 +42,7 @@ jobs:
           python-version: "3.11"
 
       - name: Instalar dependências
-        run: pip install requests
+        run: pip3 install --quiet requests
 
       - name: Restaurar estado anterior
         run: |
@@ -67,7 +67,7 @@ jobs:
           "
 
       - name: Executar scanner
-        run: python scripts/alvara_scanner.py
+        run: python3 scripts/alvara_scanner.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ inputs.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.TELEGRAM_CHAT_ID }}
