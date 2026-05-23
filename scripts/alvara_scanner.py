@@ -6,7 +6,7 @@ Hospedado no GitHub Actions (executado 1x por dia).
 Se encontrar novos projetos, envia resumo via Telegram.
 
 Uso:
-  START_ID=49125 TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... python3 alvara_scanner.py
+  START_ID=1430 TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... python3 alvara_scanner.py
 """
 
 import os
@@ -23,7 +23,7 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID",   "")
 TELEGRAM_THREAD_ID = os.environ.get("TELEGRAM_THREAD_ID", "")
 
 # START_ID só é usado se last_valid_id.json não existir
-DEFAULT_START_ID = int(os.environ.get("START_ID", 49100))
+DEFAULT_START_ID = int(os.environ.get("START_ID", 1430))
 MAX_EMPTY_CONSECUTIVE = 10
 REQUEST_TIMEOUT = 20        # segundos por requisição
 REQUEST_DELAY   = 1.5      # pausa entre requisições (segundos)
@@ -87,8 +87,12 @@ def fetch_project(project_id):
     if r.status_code != 200:
         return None
 
+    # Detecta redirecionamento para página de erro (ID inválido)
+    if "InternalError" in r.url or "alvarafacil" not in r.url:
+        return None
+
     # Detecta página inválida
-    if "não encontrado" in html or ("Tipo Alvar" not in html):
+    if "não encontrado" in html or ("Tipo Alvar" not in html and "Acompanha Alvar" not in html):
         return None
 
     def extract_all(label):
