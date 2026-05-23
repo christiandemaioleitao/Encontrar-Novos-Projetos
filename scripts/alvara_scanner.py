@@ -39,15 +39,15 @@ def load_state():
         try:
             with open(STATE_FILE) as f:
                 s = json.load(f)
-            return s.get("last_valid_id", DEFAULT_START_ID), s.get("consecutive_empty", 0)
-        except (json.JSONDecodeError, IOError):
+            return s.get("last_valid_id", DEFAULT_START_ID)
+        except (json.JSONDecodeError, IOError, KeyError):
             pass
-    return DEFAULT_START_ID, 0
+    return DEFAULT_START_ID
 
-def save_state(current_id, consecutive_empty):
+def save_state(current_id):
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w") as f:
-        json.dump({"last_valid_id": current_id, "consecutive_empty": consecutive_empty}, f, indent=2)
+        json.dump({"last_valid_id": current_id}, f, indent=2)
 
 def send_telegram(message):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -159,9 +159,9 @@ def build_message(projects, run_id=None):
     return "\n".join(lines)
 
 def run():
-    start_id, initial_empty = load_state()
+    start_id = load_state()
     current_id = start_id
-    consecutive_empty = initial_empty
+    consecutive_empty = 0
     new_projects = []
     tested = 0
     found = 0
@@ -177,24 +177,22 @@ def run():
             consecutive_empty = 0
             new_projects.append(result)
             found += 1
-            save_state(current_id, consecutive_empty)
+            save_state(current_id)
         else:
             print(f"  #{current_id} ❌ vazio")
             consecutive_empty += 1
-            # Não salva estado aqui — só salva quando encontrar algo
-            # (evita sobrescrever com vazios)
 
-        current_id += 1  # SEMPRE incrementa
+        current_id += 1
         time.sleep(REQUEST_DELAY)
 
     print(f"\n✅ Scan terminado: {tested} IDs testados, {found} encontrados")
 
     if new_projects:
-        save_state(current_id - 1, consecutive_empty)  # salva último válido
+        save_state(current_id - 1)
         msg = build_message(new_projects)
         send_telegram(msg)
     else:
-        save_state(current_id - 1, consecutive_empty)
+        save_state(current_id - 1)
         print("Nenhum projeto novo — sem envio.")
 
     # Log da execução
