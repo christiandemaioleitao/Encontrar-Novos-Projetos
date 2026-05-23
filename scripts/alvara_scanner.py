@@ -23,7 +23,7 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID",   "")
 TELEGRAM_THREAD_ID = os.environ.get("TELEGRAM_THREAD_ID", "")
 
 # START_ID só é usado se last_valid_id.json não existir
-DEFAULT_START_ID = int(os.environ.get("START_ID", 49125))
+DEFAULT_START_ID = int(os.environ.get("START_ID", 49100))
 MAX_EMPTY_CONSECUTIVE = 10
 REQUEST_TIMEOUT = 20        # segundos por requisição
 REQUEST_DELAY   = 1.5      # pausa entre requisições (segundos)
