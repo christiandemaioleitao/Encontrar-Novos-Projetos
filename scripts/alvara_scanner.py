@@ -106,6 +106,7 @@ def fetch_project(project_id):
     endereco       = extract_all("Endereço")                             or "—"
     pavimentos     = extract_all("Descrição de Pavimentos")            or "—"
     num_pav        = extract_all("Número de Pavimentos")                or "—"
+    area_terreno   = extract_all("Área Terreno")                        or "—"
 
     return {
         "id":            project_id,
@@ -118,6 +119,7 @@ def fetch_project(project_id):
         "endereco":      endereco,
         "pavimentos":    pavimentos,
         "num_pav":       num_pav,
+        "area_terreno":  area_terreno,
     }
 
 def build_message(projects, run_id=None):
@@ -145,8 +147,10 @@ def build_message(projects, run_id=None):
             lines.append(f"👤 Proprietário: {p['proprietario']}")
         if p.get("num_pav") and p["num_pav"] not in ("—",""):
             lines.append(f"🏢 Pavimentos: {p['num_pav']}")
+        if p.get("area_terreno") and p["area_terreno"] not in ("—",""):
+            lines.append(f"📐 Área Terreno: {p['area_terreno']}")
         if p.get("pavimentos") and p["pavimentos"] not in ("—",""):
-            lines.append(f"📐 {p['pavimentos']}")
+            lines.append(f"   {p['pavimentos']}")
         if p.get("licenca_previa") and p["licenca_previa"] not in ("—",""):
             lines.append(f"📄 Licença Prévia: {p['licenca_previa']}")
         if p.get("autor") and p["autor"] not in ("—",""):
