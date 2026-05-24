@@ -96,51 +96,52 @@ def fetch_project(project_id):
     if "não encontrado" in html or ("Tipo Alvar" not in html and "Acompanha Alvar" not in html):
         return None
 
-    # Parser HTML robusto — extrai pares label → valor usando DOM
-    class LabelValueParser(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self.data = []          # [(text, is_label)]
-            self.in_label = False
-            self.label_text = ""
-        def handle_starttag(self, tag, attrs):
-            if tag == "td":
-                cls = dict(attrs).get("class", "")
-                self.in_label = ("label" in cls.lower() or "titulo" in cls.lower())
-        def handle_data(self, data):
-            stripped = data.strip()
-            if stripped:
-                self.data.append((stripped, self.in_label))
-            self.in_label = False
-
+    # Parser HTML robusto — usa html.parser para extrair pares label → valor
+    # A tabela tem estrutura <tr><td class="titulo">Label</td><td>Valor</td></tr>
     class FormExtractor:
-        """Percorre a tabela do formulário label → td[valor]."""
         def __init__(self, html):
             self.fields = {}
             self._parse(html)
 
         def _parse(self, html):
-            # Quebra por linhas da tabela, encontra labels e pega o td seguinte
-            lines = re.split(r"(?:\r?\n)+", html)
-            i = 0
-            while i < len(lines):
-                # Label: <td class="titulo">Nome do Campo</td>
-                m = re.search(r"<td[^>]*class=\"[^\"]*titulo[^\"]*\"[^>]*>(.*?)</td>", lines[i], re.DOTALL | re.IGNORECASE)
-                if m:
-                    label = re.sub(r"<[^>]+>", "", m.group(1)).strip()
-                    # Pega o próximo <td> de valor (não-titulo)
-                    j = i + 1
-                    while j < min(i + 5, len(lines)):
-                        vm = re.search(r"<td[^>]*>(.*?)</td>", lines[j], re.DOTALL)
-                        if vm:
-                            val = re.sub(r"<[^>]+>", "", vm.group(1)).strip()
-                            # Pula tags vazias e que são só decorators
-                            if val and not re.match(r"^&nbsp;$|^&#\d+;$|^&#x[a-f0-9]+;$", val, re.I):
-                                if label not in self.fields or not self.fields[label]:
-                                    self.fields[label] = val
-                                break
-                        j += 1
-                i += 1
+            # Usa html.parser para walk no DOM sem regex greedy
+            class TableParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.in_titulo_td = False
+                    self.in_valor_td = False
+                    self.current_label = None
+                    self.fields = {}
+                    self.td_count = 0
+
+                def handle_starttag(self, tag, attrs):
+                    if tag == "td":
+                        cls = dict(attrs).get("class", "")
+                        if "titulo" in cls.lower():
+                            self.in_titulo_td = True
+                            self.in_valor_td = False
+                        elif self.in_titulo_td and not self.in_valor_td:
+                            # Este td é o de valor (imediatamente após o label)
+                            self.in_valor_td = True
+                            self.in_titulo_td = False
+
+                def handle_data(self, data):
+                    stripped = data.strip()
+                    if not stripped or re.match(r"^&nbsp;$|^&#\d+;$|^&#x[a-f0-9]+;$", stripped, re.I):
+                        return
+                    if self.in_titulo_td:
+                        self.current_label = stripped
+                        self.in_titulo_td = False
+                    elif self.in_valor_td and self.current_label:
+                        # Só grava se ainda não existe (evita sobrescrever comradio buttons)
+                        if self.current_label not in self.fields:
+                            self.fields[self.current_label] = stripped
+                        self.current_label = None
+                        self.in_valor_td = False
+
+            parser = TableParser()
+            parser.feed(html)
+            self.fields = parser.fields
 
         def get(self, key):
             return self.fields.get(key, "")
@@ -154,6 +155,7 @@ def fetch_project(project_id):
         "taxa_data":     fe.get("Data Pagamento Taxa Inicial")                   or "—",
         "licenca_previa": fe.get("Licença Prévia")                                or "—",
         "tipo":          fe.get("Tipo")                                           or "—",
+        "autor":         fe.get("Autor")                                           or "—",
         "proprietario":   fe.get("Proprietário")                                   or "—",
         "endereco":       fe.get("Endereço")                                      or "—",
         "num_pav":        fe.get("Número de Pavimentos")                          or "—",
