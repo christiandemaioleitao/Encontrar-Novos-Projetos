@@ -31,7 +31,7 @@ jobs:
           if [ -f scripts/last_valid_id.json ]; then
             echo "✅ Estado: $(cat scripts/last_valid_id.json)"
           else
-            echo '{ "last_valid_id": 49125, "consecutive_empty": 0 }' > scripts/last_valid_id.json
+            echo '{ "last_valid_id": 50590, "consecutive_empty": 0 }' > scripts/last_valid_id.json
             echo "📄 Estado inicial criado"
           fi
 
