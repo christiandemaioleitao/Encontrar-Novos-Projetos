@@ -47,7 +47,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add scripts/last_valid_id.json scripts/scan_log.json 2>/dev/null || true
-          git diff --cached --quiet && echo "Sem mudanças" || {
+          git diff --cached --quiet && echo "Sem mudancas" || {
             git commit -m "[auto] scanner $(date +'%Y-%m-%d %H:%M')" || true
-            git push origin main || echo "Push não realizado"
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git push origin main || echo "Push nao realizado"
           }

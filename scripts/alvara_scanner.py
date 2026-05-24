@@ -15,6 +15,7 @@ import json
 import time
 import re
 import requests
+from html.parser import HTMLParser
 from datetime import datetime, timezone
 
 # ─── Configurações ───────────────────────────────────────────────
@@ -95,35 +96,68 @@ def fetch_project(project_id):
     if "não encontrado" in html or ("Tipo Alvar" not in html and "Acompanha Alvar" not in html):
         return None
 
-    def extract_all(label):
-        pattern = rf"{re.escape(label)}.*?<td[^>]*>(.*?)</td>"
-        m = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
-        if m:
-            return re.sub(r"<[^>]+>", "", m.group(1)).strip()
-        return ""
+    # Parser HTML robusto — extrai pares label → valor usando DOM
+    class LabelValueParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.data = []          # [(text, is_label)]
+            self.in_label = False
+            self.label_text = ""
+        def handle_starttag(self, tag, attrs):
+            if tag == "td":
+                cls = dict(attrs).get("class", "")
+                self.in_label = ("label" in cls.lower() or "titulo" in cls.lower())
+        def handle_data(self, data):
+            stripped = data.strip()
+            if stripped:
+                self.data.append((stripped, self.in_label))
+            self.in_label = False
 
-    situacao       = extract_all("Situação")                            or "—"
-    taxa           = extract_all("Data Pagamento Taxa Inicial")          or "—"
-    licenca_previa = extract_all("Licença Prévia")                       or "—"
-    tipo           = extract_all("Tipo")                                 or "—"
-    proprietario   = extract_all("Proprietário")                         or "—"
-    endereco       = extract_all("Endereço")                             or "—"
-    pavimentos     = extract_all("Descrição de Pavimentos")            or "—"
-    num_pav        = extract_all("Número de Pavimentos")                or "—"
-    area_terreno   = extract_all("Área Terreno")                        or "—"
+    class FormExtractor:
+        """Percorre a tabela do formulário label → td[valor]."""
+        def __init__(self, html):
+            self.fields = {}
+            self._parse(html)
+
+        def _parse(self, html):
+            # Quebra por linhas da tabela, encontra labels e pega o td seguinte
+            lines = re.split(r"(?:\r?\n)+", html)
+            i = 0
+            while i < len(lines):
+                # Label: <td class="titulo">Nome do Campo</td>
+                m = re.search(r"<td[^>]*class=\"[^\"]*titulo[^\"]*\"[^>]*>(.*?)</td>", lines[i], re.DOTALL | re.IGNORECASE)
+                if m:
+                    label = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+                    # Pega o próximo <td> de valor (não-titulo)
+                    j = i + 1
+                    while j < min(i + 5, len(lines)):
+                        vm = re.search(r"<td[^>]*>(.*?)</td>", lines[j], re.DOTALL)
+                        if vm:
+                            val = re.sub(r"<[^>]+>", "", vm.group(1)).strip()
+                            # Pula tags vazias e que são só decorators
+                            if val and not re.match(r"^&nbsp;$|^&#\d+;$|^&#x[a-f0-9]+;$", val, re.I):
+                                if label not in self.fields or not self.fields[label]:
+                                    self.fields[label] = val
+                                break
+                        j += 1
+                i += 1
+
+        def get(self, key):
+            return self.fields.get(key, "")
+
+    fe = FormExtractor(html)
 
     return {
         "id":            project_id,
         "url":           url,
-        "situacao":      situacao,
-        "taxa_data":     taxa,
-        "licenca_previa": licenca_previa,
-        "tipo":          tipo,
-        "proprietario":  proprietario,
-        "endereco":      endereco,
-        "pavimentos":    pavimentos,
-        "num_pav":       num_pav,
-        "area_terreno":  area_terreno,
+        "situacao":      fe.get("Situação")                                       or "—",
+        "taxa_data":     fe.get("Data Pagamento Taxa Inicial")                   or "—",
+        "licenca_previa": fe.get("Licença Prévia")                                or "—",
+        "tipo":          fe.get("Tipo")                                           or "—",
+        "proprietario":   fe.get("Proprietário")                                   or "—",
+        "endereco":       fe.get("Endereço")                                      or "—",
+        "num_pav":        fe.get("Número de Pavimentos")                          or "—",
+        "area_terreno":   fe.get("Área Terreno")                                  or "—",
     }
 
 def build_message(projects, run_id=None):
