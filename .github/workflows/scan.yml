@@ -1,18 +1,33 @@
 name: Scanner de Alvarás — Goiânia
 
-on:
-  schedule:
-    # Executa todo dia às 09:00 Brasília = 12:00 UTC
-    - cron: "0 12 * * *"
+# DESATIVADO — agendamento removido em 27/05/2026
+# Para reativar, remova o "#" das linhas abaixo.
+#
+# on:
+#   schedule:
+#     - cron: "0 12 * * *"
+#   workflow_dispatch:
+
   workflow_dispatch:
+    inputs:
+      TELEGRAM_BOT_TOKEN:
+        description: "Token do Bot Telegram"
+        required: true
+        type: string
+      TELEGRAM_CHAT_ID:
+        description: "Chat ID do Telegram"
+        required: true
+        type: string
+      TELEGRAM_THREAD_ID:
+        description: "Thread ID (opicional)"
+        required: false
+        type: string
 
 jobs:
   scan:
     name: 🔍 Varredura de Alvarás
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
@@ -33,24 +48,23 @@ jobs:
           if [ -f scripts/last_valid_id.json ]; then
             echo "✅ Estado: $(cat scripts/last_valid_id.json)"
           else
-            echo '{ "last_valid_id": 50590, "consecutive_empty": 0 }' > scripts/last_valid_id.json
+            echo '{ "last_valid_id": 49125 }' > scripts/last_valid_id.json
             echo "📄 Estado inicial criado"
           fi
 
       - name: Executar scanner
         run: python3 scripts/alvara_scanner.py
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_THREAD_ID: ${{ secrets.TELEGRAM_THREAD_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ inputs.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ inputs.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_ID: ${{ inputs.TELEGRAM_THREAD_ID }}
 
       - name: Salvar estado no repo
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add scripts/last_valid_id.json scripts/scan_log.json 2>/dev/null || true
-          git diff --cached --quiet && echo "Sem mudancas" || {
+          git diff --cached --quiet && echo "Sem mudanças" || {
             git commit -m "[auto] scanner $(date +'%Y-%m-%d %H:%M')" || true
-            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-            git push origin main || echo "Push nao realizado"
+            git push origin main || echo "Push não realizado"
           }
