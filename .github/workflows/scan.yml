@@ -1,27 +1,27 @@
 name: Scanner de Alvarás — Goiânia
 
-# DESATIVADO — agendamento removido em 27/05/2026
-# Para reativar, remova o "#" das linhas abaixo.
-#
-# on:
-#   schedule:
-#     - cron: "0 12 * * *"
-#   workflow_dispatch:
-
+on:
+  schedule:
+    # 12:00 UTC = 09:00 (horário de Brasília) — 1x por dia
+    - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
       TELEGRAM_BOT_TOKEN:
-        description: "Token do Bot Telegram"
-        required: true
-        type: string
-      TELEGRAM_CHAT_ID:
-        description: "Chat ID do Telegram"
-        required: true
-        type: string
-      TELEGRAM_THREAD_ID:
-        description: "Thread ID (opicional)"
+        description: "Token do Bot Telegram (deixe vazio p/ usar o secret)"
         required: false
         type: string
+      TELEGRAM_CHAT_ID:
+        description: "Chat ID do Telegram (deixe vazio p/ usar o secret)"
+        required: false
+        type: string
+      TELEGRAM_THREAD_ID:
+        description: "Thread ID (opcional)"
+        required: false
+        type: string
+
+# Necessário para o passo "Salvar estado no repo" conseguir dar git push
+permissions:
+  contents: write
 
 jobs:
   scan:
@@ -32,8 +32,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Python 3.11
         uses: actions/setup-python@v5
@@ -55,9 +53,10 @@ jobs:
       - name: Executar scanner
         run: python3 scripts/alvara_scanner.py
         env:
-          TELEGRAM_BOT_TOKEN: ${{ inputs.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ inputs.TELEGRAM_CHAT_ID }}
-          TELEGRAM_THREAD_ID: ${{ inputs.TELEGRAM_THREAD_ID }}
+          # Em execução manual usa o input; se vazio (ou em agendamento) usa o secret.
+          TELEGRAM_BOT_TOKEN: ${{ github.event.inputs.TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ github.event.inputs.TELEGRAM_CHAT_ID   || secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_ID: ${{ github.event.inputs.TELEGRAM_THREAD_ID || secrets.TELEGRAM_THREAD_ID }}
 
       - name: Salvar estado no repo
         run: |
