@@ -12,7 +12,7 @@ Scanner diário de Alvarás da Prefeitura de Goiânia — detecta novos projetos
 
 - `scripts/alvara_scanner.py` — script principal
 - `scripts/last_valid_id.json` — estado (último ID válido)
-- `scripts/.github/workflows/scan.yml` — GitHub Actions
+- `.github/workflows/scan.yml` — GitHub Actions (agendamento diário + execução manual)
 
 ## Configurar no GitHub
 
