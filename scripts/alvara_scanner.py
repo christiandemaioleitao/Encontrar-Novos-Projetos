@@ -29,8 +29,13 @@ MAX_EMPTY_CONSECUTIVE = 50
 # Teto de IDs testados por execução: evita estourar o timeout de 30 min do
 # GitHub Actions quando há um backlog grande (a fila é limpa em rodadas diárias).
 MAX_IDS_PER_RUN = int(os.environ.get("MAX_IDS_PER_RUN", 300))
+# Parada por tempo de relógio: garante que a rodada nunca chega perto do
+# timeout de 30 min, mesmo quando o site da Prefeitura está lento.
+DEADLINE_SECONDS = int(os.environ.get("DEADLINE_SECONDS", 1200))   # 20 min
 # Nº de projetos por mensagem do Telegram (limite da API é 4096 caracteres).
 TELEGRAM_CHUNK  = 8
+# Pausa entre mensagens do Telegram para não tomar 429 (Too Many Requests).
+TELEGRAM_MSG_DELAY = 3.5
 REQUEST_TIMEOUT = 20        # segundos por requisição
 REQUEST_DELAY   = 1.5       # pausa entre requisições (segundos)
 STATE_FILE      = "scripts/last_valid_id.json"
@@ -75,17 +80,29 @@ def send_telegram(message):
     }
     if TELEGRAM_THREAD_ID:
         payload["message_thread_id"] = TELEGRAM_THREAD_ID
-    try:
-        r = requests.post(url, json=payload, timeout=15)
+    # Até 4 tentativas, respeitando o retry_after quando a API devolve 429.
+    for _ in range(4):
+        try:
+            r = requests.post(url, json=payload, timeout=15)
+        except requests.RequestException as e:
+            print(f"[TELEGRAM] Exceção: {e}")
+            return False
         if r.ok:
             print("[TELEGRAM] Mensagem enviada!")
             return True
-        else:
-            print(f"[TELEGRAM] Erro {r.status_code}: {r.text}")
-            return False
-    except requests.RequestException as e:
-        print(f"[TELEGRAM] Exceção: {e}")
+        if r.status_code == 429:
+            wait = 5
+            try:
+                wait = int(r.json()["parameters"]["retry_after"]) + 1
+            except Exception:
+                pass
+            print(f"[TELEGRAM] 429 — aguardando {wait}s e tentando de novo…")
+            time.sleep(wait)
+            continue
+        print(f"[TELEGRAM] Erro {r.status_code}: {r.text}")
         return False
+    print("[TELEGRAM] Falhou após várias tentativas (429).")
+    return False
 
 def extract_fields(raw_html: str) -> dict:
     """
@@ -211,8 +228,11 @@ def run():
 
     print(f"▶ Partindo do ID {current_id}  (último testado: {last_id})")
 
-    # Para em 50 vazios seguidos OU ao atingir o teto de IDs da rodada (anti-timeout).
-    while consecutive_empty < MAX_EMPTY_CONSECUTIVE and tested < MAX_IDS_PER_RUN:
+    t0 = time.time()
+    # Para em 50 vazios seguidos, no teto de IDs, OU no deadline de tempo (anti-timeout).
+    while (consecutive_empty < MAX_EMPTY_CONSECUTIVE
+           and tested < MAX_IDS_PER_RUN
+           and (time.time() - t0) < DEADLINE_SECONDS):
         tested += 1
         result = fetch_project(current_id)
 
@@ -231,7 +251,12 @@ def run():
 
     # Salva o último ID testado (mesmo que vazio) para retomar daqui
     save_state(current_id - 1)
-    parou_por = "teto da rodada" if tested >= MAX_IDS_PER_RUN else "50 vazios seguidos"
+    if (time.time() - t0) >= DEADLINE_SECONDS:
+        parou_por = "deadline de tempo"
+    elif tested >= MAX_IDS_PER_RUN:
+        parou_por = "teto da rodada"
+    else:
+        parou_por = "50 vazios seguidos"
     print(f"\n✅ Scan terminado ({parou_por}): {tested} IDs testados, {found} encontrados")
 
     if new_projects:
@@ -239,7 +264,7 @@ def run():
         for i in range(0, len(new_projects), TELEGRAM_CHUNK):
             batch = new_projects[i:i + TELEGRAM_CHUNK]
             send_telegram(build_message(batch))
-            time.sleep(1)
+            time.sleep(TELEGRAM_MSG_DELAY)
     else:
         print("Nenhum projeto novo — sem envio.")
 
