@@ -26,6 +26,11 @@ TELEGRAM_THREAD_ID = os.environ.get("TELEGRAM_THREAD_ID", "")
 # START_ID só é usado se last_valid_id.json não existir
 DEFAULT_START_ID = int(os.environ.get("START_ID", 50590))
 MAX_EMPTY_CONSECUTIVE = 50
+# Teto de IDs testados por execução: evita estourar o timeout de 30 min do
+# GitHub Actions quando há um backlog grande (a fila é limpa em rodadas diárias).
+MAX_IDS_PER_RUN = int(os.environ.get("MAX_IDS_PER_RUN", 300))
+# Nº de projetos por mensagem do Telegram (limite da API é 4096 caracteres).
+TELEGRAM_CHUNK  = 8
 REQUEST_TIMEOUT = 20        # segundos por requisição
 REQUEST_DELAY   = 1.5       # pausa entre requisições (segundos)
 STATE_FILE      = "scripts/last_valid_id.json"
@@ -206,7 +211,8 @@ def run():
 
     print(f"▶ Partindo do ID {current_id}  (último testado: {last_id})")
 
-    while consecutive_empty < MAX_EMPTY_CONSECUTIVE:
+    # Para em 50 vazios seguidos OU ao atingir o teto de IDs da rodada (anti-timeout).
+    while consecutive_empty < MAX_EMPTY_CONSECUTIVE and tested < MAX_IDS_PER_RUN:
         tested += 1
         result = fetch_project(current_id)
 
@@ -225,11 +231,15 @@ def run():
 
     # Salva o último ID testado (mesmo que vazio) para retomar daqui
     save_state(current_id - 1)
-    print(f"\n✅ Scan terminado: {tested} IDs testados, {found} encontrados")
+    parou_por = "teto da rodada" if tested >= MAX_IDS_PER_RUN else "50 vazios seguidos"
+    print(f"\n✅ Scan terminado ({parou_por}): {tested} IDs testados, {found} encontrados")
 
     if new_projects:
-        msg = build_message(new_projects)
-        send_telegram(msg)
+        # Envia em lotes para não estourar o limite de 4096 caracteres do Telegram.
+        for i in range(0, len(new_projects), TELEGRAM_CHUNK):
+            batch = new_projects[i:i + TELEGRAM_CHUNK]
+            send_telegram(build_message(batch))
+            time.sleep(1)
     else:
         print("Nenhum projeto novo — sem envio.")
 
